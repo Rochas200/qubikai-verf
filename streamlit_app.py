@@ -103,7 +103,7 @@ def encode_image(image):
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 def analyze_image(base64_image):
-    # Let op de drie aanhalingstekens hieronder! Die zijn cruciaal.
+    # De Prompt (Let op de 3 aanhalingstekens!)
     prompt = """
     Jij bent de Meesterschilder van Qubikai met 25 jaar ervaring.
     Je analyseert foto's van kamers/muren om de gebruiker perfect advies te geven.
@@ -137,7 +137,22 @@ def analyze_image(base64_image):
     ### 💡 Meesterschilder Tip
     [Eén gouden tip specifiek voor DEZE situatie.]
     """
-    # Hierboven moeten ook weer drie aanhalingstekens staan!
+
+    # De aanroep naar OpenAI (Dit mag maar 1x gebeuren)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]}
+            ],
+            max_tokens=600,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Fout: {e}"
 
     try:
         response = client.chat.completions.create(
