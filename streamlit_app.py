@@ -19,7 +19,7 @@ BACKGROUND_COLOR = "#0E1117"
 st.set_page_config(
     page_title=APP_NAME,
     page_icon=APP_ICON,
-    layout="centered", # Centered leest vaak fijner op mobiel dan Wide
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
@@ -87,7 +87,7 @@ if 'page' not in st.session_state:
 if 'analysis_result' not in st.session_state:
     st.session_state.analysis_result = ""
 
-# API FIX: Gebruik ALTIJD st.secrets voor veiligheid
+# API Check
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except:
@@ -103,7 +103,7 @@ def encode_image(image):
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 def analyze_image(base64_image):
-    # De Prompt (Let op de 3 aanhalingstekens!)
+    # De Prompt (Let op: dit is nu één schoon blok)
     prompt = """
     Jij bent de Meesterschilder van Qubikai met 25 jaar ervaring.
     Je analyseert foto's van kamers/muren om de gebruiker perfect advies te geven.
@@ -138,68 +138,7 @@ def analyze_image(base64_image):
     [Eén gouden tip specifiek voor DEZE situatie.]
     """
 
-    # De aanroep naar OpenAI (Dit mag maar 1x gebeuren)
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]}
-            ],
-            max_tokens=600,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Fout: {e}"
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]}
-            ],
-            max_tokens=600,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Fout: {e}"
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]}
-            ],
-            max_tokens=600,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Fout: {e}"
-    
-    Geef antwoord in Markdown:
-    # [Korte titel, bijv: "Schatting: 24 m²"]
-    
-    ### 📏 Metingen & Liters
-    * **Geschat Oppervlak:** [Aantal] m²
-    * **Verf nodig:** [Aantal] liter (Reken: 1L per 8m²)
-    * **Kostenindicatie:** € [Bedrag] (Reken: €15/L)
-    
-    ### 🛠️ Benodigdheden
-    * [Advies over rollers/kwasten]
-    * [Advies over afplakken]
-    
-    ### 💡 Schilder Tip
-    [Eén gouden tip over de ondergrond die je ziet]
-    """
-
+    # De aanroep naar OpenAI (Nu staat dit er maar 1 keer!)
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -231,7 +170,7 @@ with c2:
 
 # --- HOME ---
 if st.session_state.page == 'home':
-    # Check voor logo (optioneel)
+    # Check voor logo
     if os.path.exists("logo.png"):
         st.image("logo.png", width=80)
         
@@ -293,7 +232,7 @@ elif st.session_state.page == 'result':
         st.image(img, use_container_width=True, caption="Jouw muur")
     
     with c_txt:
-        # MARKDOWN FIX: Eerst div openen, dan markdown printen, dan sluiten
+        # Weergeven in card
         st.markdown('<div class="result-card">', unsafe_allow_html=True)
         st.markdown(st.session_state.analysis_result)
         st.markdown('</div>', unsafe_allow_html=True)
