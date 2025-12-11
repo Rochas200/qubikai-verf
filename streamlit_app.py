@@ -102,9 +102,56 @@ def encode_image(image):
     image.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-def analyze_image(base64_image):
+def def analyze_image(base64_image):
+    # HIER ZIT DE NIEUWE INTELLIGENTIE 🧠
     prompt = """
-    Je bent een professionele schilder. Analyseer de foto.
+    Jij bent de Meesterschilder van Qubikai met 25 jaar ervaring.
+    Je analyseert foto's van kamers/muren om de gebruiker perfect advies te geven.
+    
+    DOE EERST DIT (INTERN):
+    1. Analyseer de ONDERGROND: Is het glad stucwerk? Baksteen? Hout? Behang? (Dit beïnvloedt de verfopname).
+    2. Schat de AFMETINGEN: Kijk naar referentiepunten (deuren zijn vaak 2m hoog, stopcontacten 30cm laag).
+    3. Bereken de OPPERVLAKTE (Hoogte x Breedte minus ramen/deuren).
+    4. Bepaal de VERF SPUITBAARHEID: Ruwe muren zuigen meer verf op (+10-20% extra nodig).
+    
+    GEEF JE ANTWOORD IN DIT EXACTE MARKDOWN FORMAT:
+    
+    # [Pakkende Titel, bijv: "Project Woonkamer: Baksteen Muur"]
+    
+    ### 🕵️‍♂️ Analyse van de muur
+    * **Ondergrond:** [Wat zie je? Glad/Ruw/Behang?]
+    * **Conditie:** [Ziet het er schoon uit of is voorbehandeling nodig?]
+    
+    ### 📏 De Berekening
+    * **Geschatte afmetingen:** [Hoogte]m x [Breedte]m
+    * **Netto Oppervlak:** **[Aantal] m²**
+    * **Benodigde Verf:** **[Aantal] Liter** *(Gebaseerd op [Type ondergrond])*
+    * **Kostenindicatie:** € [Bedrag] *(uitgaande van kwaliteitsverf à €15/L)*
+    
+    ### 🛒 Boodschappenlijst
+    * **Verf:** [Type verf advies: Latex/Muurverf/Lak]
+    * **Roller:** [Advies: Kortharig voor glad, Langharig voor ruw]
+    * **Voorstrijk:** [JA/NEE - Waarom?]
+    * **Tape:** [Type tape advies]
+    
+    ### 💡 Meesterschilder Tip
+    [Eén gouden tip specifiek voor DEZE situatie op de foto.]
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]}
+            ],
+            max_tokens=600,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Fout: {e}"
     
     Geef antwoord in Markdown:
     # [Korte titel, bijv: "Schatting: 24 m²"]
