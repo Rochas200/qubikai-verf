@@ -1,114 +1,232 @@
 import streamlit as st
-import base64
 from openai import OpenAI
+from PIL import Image
+import base64
+import io
+import os
 
-# 1. Configuratie
-st.set_page_config(page_title="Qubikai - VerfBuddy", page_icon="🎨")
+# ==========================================
+# 1. APP CONFIGURATIE (Blauw voor Verf) 🔵
+# ==========================================
+APP_NAME = "VerfBuddy"
+APP_ICON = "🖌️"
+ACCENT_COLOR = "#0078D7"  # Helder Blauw
+BACKGROUND_COLOR = "#0E1117"
 
-# --- STYLING (Qubikai Klus Thema: Blauw/Groen) ---
-st.markdown("""
+# ==========================================
+# 2. SETUP & STYLING 🎨
+# ==========================================
+st.set_page_config(
+    page_title=APP_NAME,
+    page_icon=APP_ICON,
+    layout="centered", # Centered leest vaak fijner op mobiel dan Wide
+    initial_sidebar_state="collapsed"
+)
+
+st.markdown(f"""
 <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .block-container {padding-top: 2rem; padding-bottom: 2rem;}
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
     
-    /* Grote Knoppen (Blauw) */
-    div.stButton > button {
-        width: 100%;
-        background-color: #0078D7;
-        color: white;
-        font-size: 20px;
-        font-weight: 700;
-        padding: 15px 0px;
+    html, body, [class*="css"] {{
+        font-family: 'Montserrat', sans-serif;
+        color: #FAFAFA;
+        background-color: {BACKGROUND_COLOR};
+    }}
+    
+    /* Navigatie verbergen */
+    [data-testid="stSidebarNav"] {{display: none;}}
+    
+    /* HEADER BALK */
+    .nav-bar {{
+        padding: 15px;
+        background-color: #161B22;
+        border-bottom: 1px solid #30363D;
+        margin-bottom: 20px;
         border-radius: 12px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 1.3em;
+        border-left: 6px solid {ACCENT_COLOR};
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }}
+
+    /* Custom Knoppen */
+    div.stButton > button {{
+        background-color: {ACCENT_COLOR};
+        color: white;
         border: none;
-        transition: all 0.3s;
-    }
-    div.stButton > button:hover {
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        width: 100%;
+        text-transform: uppercase;
+    }}
+    div.stButton > button:hover {{
         background-color: #005a9e;
         transform: translateY(-2px);
-        color: white;
-    }
-    /* Input velden strakker */
-    [data-testid="stNumberInput"] {
-        background-color: #f0f2f6;
+    }}
+    
+    /* Resultaat Kaarten (Container Class) */
+    .result-card {{
+        background-color: #1F2937;
+        padding: 20px;
         border-radius: 10px;
-    }
-    h1 {text-align: center;}
+        border-left: 4px solid {ACCENT_COLOR};
+        margin-top: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }}
 </style>
 """, unsafe_allow_html=True)
 
-# 2. Titel
-st.title("🎨 VerfBuddy")
-st.write("Foto van de muur + de maten = Direct weten wat je moet kopen.")
+# ==========================================
+# 3. STATE & API 🧠
+# ==========================================
+if 'page' not in st.session_state:
+    st.session_state.page = 'home'
+if 'analysis_result' not in st.session_state:
+    st.session_state.analysis_result = ""
 
-# 3. API Setup
+# API FIX: Gebruik ALTIJD st.secrets voor veiligheid
 try:
-    api_key = st.secrets["OPENAI_API_KEY"]
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except:
-    st.error("⚠️ Oeps! API Key mist nog in de Secrets.")
+    st.error("⚠️ CRITICAAL: Geen API Key gevonden in Secrets!")
     st.stop()
 
-# 4. De Inputs (Foto + Maten)
-col1, col2 = st.columns(2)
-with col1:
-    hoogte = st.number_input("Hoogte (meters)", value=2.6, step=0.1)
-with col2:
-    breedte = st.number_input("Breedte (meters)", value=4.0, step=0.5)
+# ==========================================
+# 4. HULPFUNCTIES
+# ==========================================
+def encode_image(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-uploaded_file = st.file_uploader("Maak een foto van de muur (voor advies over ondergrond)", type=['png', 'jpg', 'jpeg'])
-
-# 5. De Magie
-def analyze_wall(image_bytes, h, b):
-    encoded_image = base64.b64encode(image_bytes).decode('utf-8')
-    oppervlakte = h * b
+def analyze_image(base64_image):
+    prompt = """
+    Je bent een professionele schilder. Analyseer de foto.
     
-    prompt = f"""
-    Jij bent VerfBuddy, de expert schilder van Qubikai.
-    De gebruiker heeft een muur van {h}m hoog en {b}m breed (Totaal: {oppervlakte:.1f} m2).
+    Geef antwoord in Markdown:
+    # [Korte titel, bijv: "Schatting: 24 m²"]
     
-    Kijk naar de foto van de muur en geef advies:
-    1. ONDERGROND: Wat zie je? (Glad stucwerk, baksteen, oud behang, zuigende muur?)
-    2. LITERS NODIG: Reken met 8m2 per liter (voor zekerheid). Reken uit: {oppervlakte} / 8. Rond af naar boven op hele liters.
-    3. ADVIES: Heb ik voorstrijk nodig? Welke roller (kortharig/langharig)? 
+    ### 📏 Metingen & Liters
+    * **Geschat Oppervlak:** [Aantal] m²
+    * **Verf nodig:** [Aantal] liter (Reken: 1L per 8m²)
+    * **Kostenindicatie:** € [Bedrag] (Reken: €15/L)
     
-    Hou het kort, krachtig en als een lijstje.
+    ### 🛠️ Benodigdheden
+    * [Advies over rollers/kwasten]
+    * [Advies over afplakken]
+    
+    ### 💡 Schilder Tip
+    [Eén gouden tip over de ondergrond die je ziet]
     """
 
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "system", 
-                "content": "Je bent een behulpzame klus-expert. Geef antwoord in Markdown met dikgedrukte koppen."
-            },
-            {
-                "role": "user",
-                "content": [
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": [
                     {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}}
-                ],
-            }
-        ],
-        max_tokens=400
-    )
-    return response.choices[0].message.content
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]}
+            ],
+            max_tokens=600,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Fout: {e}"
 
-# 6. De Actie Knop
-if uploaded_file is not None:
-    st.image(uploaded_file, caption='Jouw muur', use_column_width=True)
+# ==========================================
+# 5. PAGINA'S 📱
+# ==========================================
+
+# --- HEADER (Altijd zichtbaar) ---
+c1, c2 = st.columns([1, 5])
+with c1:
+    if st.button("🏠", help="Terug naar Home"):
+        st.session_state.page = 'home'
+        st.rerun()
+with c2:
+    st.markdown(f"<div class='nav-bar'>{APP_NAME}</div>", unsafe_allow_html=True)
+
+
+# --- HOME ---
+if st.session_state.page == 'home':
+    # Check voor logo (optioneel)
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=80)
+        
+    st.markdown("<h2 style='text-align: center;'>Hoeveel verf heb ik nodig? 🤔</h2>", unsafe_allow_html=True)
+    st.write("<div style='text-align: center; color: #ccc; margin-bottom: 20px;'>Van foto naar boodschappenlijst in 1 klik.</div>", unsafe_allow_html=True)
+
+    with st.expander("ℹ️ Hoe werkt VerfBuddy?", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("#### 1. Foto")
+            st.caption("Maak een foto van je muur.")
+        with c2:
+            st.markdown("#### 2. Bereken")
+            st.caption("Ik reken de liters uit.")
+        with c3:
+            st.markdown("#### 3. Start")
+            st.caption("Jij kunt direct aan de slag.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    if st.button('🧮 Bereken mijn Verf'):
-        with st.spinner('Muur inspecteren en rekenen...'):
-            try:
-                bytes_data = uploaded_file.getvalue()
-                resultaat = analyze_wall(bytes_data, hoogte, breedte)
-                
-                st.success("Berekening Compleet!")
-                st.markdown("### 📋 Jouw Boodschappenlijstje")
-                st.markdown(resultaat)
-                
-            except Exception as e:
-                st.error(f"Foutje: {e}")
+    c_left, c_btn, c_right = st.columns([1, 2, 1])
+    with c_btn:
+        if st.button("🚀 START PROJECT", type="primary"):
+            st.session_state.page = 'upload'
+            st.rerun()
+
+# --- UPLOAD ---
+elif st.session_state.page == 'upload':
+    st.markdown("### 📸 Stap 1: Upload je muur")
+    
+    uploaded_file = st.file_uploader("Kies bestand", label_visibility="collapsed")
+    
+    if uploaded_file:
+        st.session_state.current_image = uploaded_file
+        st.session_state.page = 'processing'
+        st.rerun()
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔙 Terug"):
+        st.session_state.page = 'home'
+        st.rerun()
+
+# --- PROCESSING ---
+elif st.session_state.page == 'processing':
+    with st.spinner('📐 Muren opmeten...'):
+        image = Image.open(st.session_state.current_image)
+        base64_img = encode_image(image)
+        result = analyze_image(base64_img)
+        st.session_state.analysis_result = result
+        st.session_state.page = 'result'
+        st.rerun()
+
+# --- RESULTAAT ---
+elif st.session_state.page == 'result':
+    c_img, c_txt = st.columns([1, 2])
+    
+    with c_img:
+        img = Image.open(st.session_state.current_image)
+        st.image(img, use_container_width=True, caption="Jouw muur")
+    
+    with c_txt:
+        # MARKDOWN FIX: Eerst div openen, dan markdown printen, dan sluiten
+        st.markdown('<div class="result-card">', unsafe_allow_html=True)
+        st.markdown(st.session_state.analysis_result)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("---")
+    st.write("### Wat nu?")
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.link_button("🛒 Bestel Verf (Google)", "https://www.google.com/search?q=verf+kopen")
+    with col_b:
+        if st.button("🔄 Volgende Muur"):
+            st.session_state.page = 'upload'
+            st.rerun()
